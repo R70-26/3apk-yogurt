@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YogurtLab - Asistente de Formulación</title>
+
+    <!-- **PARTE CSS (a través de Tailwind CSS y estilos directos)** -->
+    <!-- Incluye Tailwind CSS para los estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuración de Tailwind para usar colores personalizados y fuente Inter -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'], // Fuente Inter para un aspecto profesional
+                    },
+                    colors: {
+                        // Paleta de colores de YogurtLab
+                        'fondo-principal': '#F8F9FA',
+                        'texto-principal': '#2C3E50',
+                        'primario-laboratorio': '#154360',
+                        'secundario-reactivo': '#1ABC9C',
+                        'acento-quimico': '#F39C12',
+                        'neutro-claro': '#E5E8E8',
+                        'complementario-verde': '#7DCEA0',
+                        'complementario-rojo': '#E74C3C',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos generales para asegurar que la fuente Inter se aplique */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+    <!-- Fin de la PARTE CSS -->
+
+    <!-- CDN de librerías JavaScript necesarias para React y gráficos -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> <!-- Para compilar JSX en el navegador -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <!-- MathJax para renderizar ecuaciones LaTeX -->
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']]
+            },
+            svg: {
+                fontCache: 'global'
+            }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+</head>
+<body>
+    <!-- **PARTE HTML (Estructura base)** -->
+    <div id="root">
+        <!-- Aquí es donde tu aplicación React se renderizará dinámicamente -->
+    </div>
+    <!-- Fin de la PARTE HTML -->
+
+    <!-- **PARTE JAVASCRIPT (Tu aplicación React con JSX)** -->
+    <!-- El atributo type="text/babel" es crucial para que Babel compile el JSX -->
+    <script type="text/babel">
+        // Componente principal de la aplicación YogurtLab
+        const App = () => {
+            // Estados para los parámetros de entrada
+            const [sueroProportion, setSueroProportion] = React.useState('');
+            const [lecheProportion, setLecheProportion] = React.useState('');
+            const [totalVolume, setTotalVolume] = React.useState('');
+            const [lechePrice, setLechePrice] = React.useState('');
+            const [sueroPrice, setSueroPrice] = React.useState('');
+            const [salesPrice, setSalesPrice] = React.useState(''); // Nuevo estado para precio de venta
+            const [incubationTemp, setIncubationTemp] = React.useState('');
+            const [fermentationTime, setFermentationTime] = React.useState('');
+            const [phValue, setPhValue] = React.useState('');
+            const [acidity, setAcidity] = React.useState('');
+            const [density, setDensity] = React.useState('');
+
+            // Estados para los resultados de la simulación actual
+            const [expectedYield, setExpectedYield] = React.useState(null);
+            const [totalCost, setTotalCost] = React.useState(null);
+            const [unitCost, setUnitCost] = React.useState(null);
+            const [totalRevenue, setTotalRevenue] = React.useState(null); // Nuevo estado para ganancia total
+            const [netProfit, setNetProfit] = React.useState(null);     // Nuevo estado para ganancia neta
+            const [recommendedFormulation, setRecommendedFormulation] = React.useState(null);
+            const [sensoryScores, setSensoryScores] = React.useState(null);
+
+            // Estado para el historial de simulaciones
+            const [history, setHistory] = React.useState([]);
+
+            // Estado para el elemento del historial seleccionado para ver el informe detallado
+            const [selectedHistoryItem, setSelectedHistoryItem] = React.useState(null);
+
+            // Estado para controlar la vista actual: 'simulation', 'report', 'recipes', 'tutorial'
+            const [currentView, setCurrentView] = React.useState('simulation');
+
+            // Estado para mensajes de la aplicación (errores, validaciones)
+            const [message, setMessage] = React.useState({ type: '', text: '' });
+
+            // Referencias para los elementos canvas de los gráficos
+            const yieldChartRef = React.useRef(null);
+            const costChartRef = React.useRef(null);
+            const sensoryChartRef = React.useRef(null);
+            const profitChartRef = React.useRef(null); // Nuevo ref para el gráfico de ganancias
+
+            // Instancias de los gráficos para poder destruirlos y recrearlos
+            const yieldChartInstance = React.useRef(null);
+            const costChartInstance = React.useRef(null);
+            const sensoryChartInstance = React.useRef(null);
+            const profitChartInstance = React.useRef(null); // Nueva instancia para el gráfico de ganancias
+
+            // Estados para controlar la visibilidad de los pasos de las recetas
+            const [showConfitadoSteps, setShowConfitadoSteps] = React.useState(false);
+            const [showMermeladaSteps, setShowMermeladaSteps] = React.useState(false);
+
+            // Cargar historial desde localStorage al inicio
+            React.useEffect(() => {
+                try {
+                    const storedHistory = localStorage.getItem('yogurtLabHistory');
+                    if (storedHistory) {
+                        setHistory(JSON.parse(storedHistory));
+                    }
+                } catch (error) {
+                    console.error("Error al cargar el historial desde localStorage:", error);
+                    showMessage('error', 'Error al cargar el historial. Intenta recargar la página.');
+                }
+            }, []);
+
+            // Guardar historial en localStorage cada vez que cambia
+            React.useEffect(() => {
+                try {
+                    localStorage.setItem('yogurtLabHistory', JSON.stringify(history));
+                } catch (error) {
+                    console.error("Error al guardar el historial en localStorage:", error);
+                    showMessage('error', 'Error al guardar el historial. Asegúrate de tener espacio suficiente.');
+                }
+            }, [history]);
+
+            // Función para mostrar mensajes personalizados
+            const showMessage = (type, text) => {
+                setMessage({ type, text });
+                // Opcional: ocultar el mensaje después de un tiempo
+                // setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+            };
+
+            // Función para validar los campos de entrada
+            const validateInputs = () => {
+                let isValid = true;
+                let errorMessage = '';
+
+                // Validar proporciones
+                const suero = parseFloat(sueroProportion);
+                const leche = parseFloat(lecheProportion);
+
+                if (isNaN(suero) || isNaN(leche) || suero < 0 || leche < 0) {
+                    errorMessage += 'Las proporciones de suero y leche deben ser números positivos. ';
+                    isValid = false;
+                } else if (suero + leche !== 100) {
+                    errorMessage += 'La suma de las proporciones de suero y leche debe ser 100%. ';
+                    isValid = false;
+                }
+
+                // Validar volumen total
+                const volume = parseFloat(totalVolume);
+                if (isNaN(volume) || volume <= 0) {
+                    errorMessage += 'El volumen total debe ser un número positivo. ';
+                    isValid = false;
+                }
+
+                // Validar precios
+                const lPrice = parseFloat(lechePrice);
+                const sPrice = parseFloat(sueroPrice);
+                if (isNaN(lPrice) || lPrice < 0 || isNaN(sPrice) || sPrice < 0) {
+                    errorMessage += 'Los precios de leche y suero deben ser números positivos. ';
+                    isValid = false;
+                }
+
+                // Validar precio de venta
+                const salesP = parseFloat(salesPrice);
+                if (isNaN(salesP) || salesP < 0) {
+                    errorMessage += 'El precio de venta debe ser un número positivo. ';
+                    isValid = false;
+                }
+
+                // Validar parámetros opcionales si están presentes
+                if (incubationTemp !== '' && (isNaN(parseFloat(incubationTemp)) || parseFloat(incubationTemp) < 0)) {
+                    errorMessage += 'La temperatura de incubación debe ser un número positivo. ';
+                    isValid = false;
+                }
+                if (fermentationTime !== '' && (isNaN(parseFloat(fermentationTime)) || parseFloat(fermentationTime) < 0)) {
+                    errorMessage += 'El tiempo de fermentación debe ser un número positivo. ';
+                    isValid = false;
+                }
+                if (phValue !== '' && (isNaN(parseFloat(phValue)) || parseFloat(phValue) < 0)) {
+                    errorMessage += 'El pH debe ser un número positivo. ';
+                    isValid = false;
+                }
+                if (acidity !== '' && (isNaN(parseFloat(acidity)) || parseFloat(acidity) < 0)) {
+                    errorMessage += 'La acidez titulable debe ser un número positivo. ';
+                    isValid = false;
+                }
+                if (density !== '' && (isNaN(parseFloat(density)) || parseFloat(density) < 0)) {
+                    errorMessage += 'La densidad debe ser un número positivo. ';
+                    isValid = false;
+                }
+
+
+                if (!isValid) {
+                    showMessage('error', errorMessage.trim());
+                } else {
+                    setMessage({ type: '', text: '' }); // Limpiar mensaje de error si todo es válido
+                }
+                return isValid;
+            };
+
+            // Función principal para realizar los cálculos
+            const performCalculations = () => {
+                if (!validateInputs()) {
+                    return;
+                }
+
+                const suero = parseFloat(sueroProportion);
+                const leche = parseFloat(lecheProportion);
+                const volume = parseFloat(totalVolume);
+                const lPrice = parseFloat(lechePrice);
+                const sPrice = parseFloat(sueroPrice);
+                const salesP = parseFloat(salesPrice); // Obtener precio de venta
+
+                let calculatedYieldPercentage;
+                // Ajuste del rendimiento basado en el estudio (Videa Bustillo & Videa Zelaya, 2019)
+                // El estudio encontró un rendimiento del 54% para la formulación 70% leche / 30% suero.
+                if (suero === 30 && leche === 70) {
+                    calculatedYieldPercentage = 54;
+                } else {
+                    // Para otras proporciones, se usa una interpolación lineal simple.
+                    // Asumiendo que el rendimiento disminuye linealmente a medida que aumenta la proporción de suero.
+                    // Un punto de referencia es (30% suero, 54% rendimiento).
+                    // Otro punto de referencia (estimado) podría ser (0% suero, 90% rendimiento) para 100% leche.
+                    // Pendiente = (54 - 90) / (30 - 0) = -36 / 30 = -1.2
+                    calculatedYieldPercentage = 90 - (suero * 1.2);
+                    // Asegurarse de que el rendimiento no sea negativo o superior a 100
+                    calculatedYieldPercentage = Math.max(0, Math.min(100, calculatedYieldPercentage));
+                }
+
+                const producedVolume = (volume * calculatedYieldPercentage) / 100;
+
+                setExpectedYield({ percentage: calculatedYieldPercentage.toFixed(2), volume: producedVolume.toFixed(2) });
+
+                // Cálculo de costos (manteniendo las fórmulas existentes como se solicitó)
+                const volLeche = (leche / 100) * volume;
+                const volSuero = (suero / 100) * volume;
+                const calculatedTotalCost = (volLeche * lPrice) + (volSuero * sPrice);
+                const calculatedUnitCost = calculatedTotalCost / producedVolume;
+
+                // Cálculo de ganancia (manteniendo las fórmulas existentes como se solicitó)
+                const calculatedTotalRevenue = producedVolume * salesP;
+                const calculatedNetProfit = calculatedTotalRevenue - calculatedTotalCost;
+
+                setTotalCost(calculatedTotalCost.toFixed(2));
+                setUnitCost(calculatedUnitCost.toFixed(2));
+                setTotalRevenue(calculatedTotalRevenue.toFixed(2));
+                setNetProfit(calculatedNetProfit.toFixed(2));
+
+                // Recomendación de formulación basada en el estudio (Videa Bustillo & Videa Zelaya, 2019)
+                setRecommendedFormulation('La proporción óptima es 70% leche / 30% suero para un mejor perfil sensorial.');
+
+                // Puntuaciones sensoriales basadas en el estudio (Tabla 3 de Videa Bustillo & Videa Zelaya, 2019)
+                let predictedSensory = {};
+                if (suero === 30 && leche === 70) {
+                    predictedSensory = {
+                        cremosidad: 4.40,
+                        sabor: 4.30,
+                        acidez: 3.78,
+                        color: 4.60,
+                        uniformidad: 3.80,
+                    };
+                } else {
+                    // Valores por defecto para otras proporciones, ya que el estudio se centró en 70/30
+                    predictedSensory = {
+                        cremosidad: 3.0,
+                        sabor: 3.0,
+                        acidez: 3.0,
+                        color: 3.0,
+                        uniformidad: 3.0,
+                    };
+                }
+                setSensoryScores(predictedSensory);
+
+                // Generar ID único de 4 cifras para el historial
+                const generateUniqueId = () => {
+                    let id;
+                    do {
+                        id = Math.floor(1000 + Math.random() * 9000).toString(); // Genera un número de 4 dígitos
+                    } while (history.some(item => item.id === id)); // Asegura que el ID sea único
+                    return id;
+                };
+
+                const newId = generateUniqueId();
+                const now = new Date();
+                const formattedDate = now.toLocaleDateString('es-ES', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                const formattedTime = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+                // Guardar en el historial
+                const newHistoryEntry = {
+                    id: newId,
+                    date: formattedDate,
+                    time: formattedTime,
+                    sueroProportion: suero,
+                    lecheProportion: leche,
+                    totalVolume: volume,
+                    lechePrice: lPrice,
+                    sueroPrice: sPrice,
+                    salesPrice: salesP, // Guardar precio de venta en historial
+                    expectedYield: calculatedYieldPercentage.toFixed(2),
+                    totalCost: calculatedTotalCost.toFixed(2),
+                    unitCost: calculatedUnitCost.toFixed(2),
+                    totalRevenue: calculatedTotalRevenue.toFixed(2), // Guardar ganancia total
+                    netProfit: calculatedNetProfit.toFixed(2),     // Guardar ganancia neta
+                    sensoryScores: predictedSensory,
+                    productName: `Yogurt_${formattedDate.replace(/\//g, '-')}_${formattedTime.replace(/:/g, '-')}` // Nombre base para el PDF
+                };
+                setHistory(prevHistory => [...prevHistory, newHistoryEntry]);
+
+                showMessage('success', 'Cálculos realizados con éxito. Revisa los resultados y gráficos.');
+            };
+
+            // Función para actualizar los gráficos
+            const updateCharts = (suero, yieldPercentage, lecheCost, sueroCost, sensoryData, totalCostData, totalRevenueData, yieldCanvas, costCanvas, sensoryCanvas, profitCanvas) => {
+                // Gráfico de Rendimiento (%) vs. % de Suero
+                yieldChartInstance.current = new Chart(yieldCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: ['0% Suero', `${suero}% Suero`, '100% Suero'],
+                        datasets: [{
+                            label: 'Rendimiento (%)',
+                            data: [90, yieldPercentage, 80], // Datos de ejemplo, ajustar según el modelo real
+                            borderColor: '#1ABC9C',
+                            backgroundColor: 'rgba(26, 188, 156, 0.2)',
+                            tension: 0.1,
+                            fill: true,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Rendimiento (%) vs. Proporción de Suero',
+                                color: '#2C3E50'
+                            },
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: '% de Suero',
+                                    color: '#2C3E50'
+                                },
+                                grid: {
+                                    color: '#E5E8E8'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Rendimiento (%)',
+                                    color: '#2C3E50'
+                                },
+                                beginAtZero: true,
+                                grid: {
+                                    color: '#E5E8E8'
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Gráfico de Barras Apiladas (Desglose de Costos)
+                costChartInstance.current = new Chart(costCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Costo por Mezcla'],
+                        datasets: [
+                            {
+                                label: 'Costo Leche',
+                                data: [lecheCost],
+                                backgroundColor: '#154360',
+                            },
+                            {
+                                label: 'Costo Suero',
+                                data: [sueroCost],
+                                backgroundColor: '#F39C12',
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Desglose de Costos (Leche vs. Suero)',
+                                color: '#2C3E50'
+                            },
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    color: '#2C3E50'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            stacked: true,
+                            grid: {
+                                color: '#E5E8E8'
+                            }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Costo ($)',
+                                color: '#2C3E50'
+                            },
+                            grid: {
+                                color: '#E5E8E8'
+                            }
+                        }
+                    }
+                });
+
+                // Gráfico Radar (Perfil Sensorial)
+                sensoryChartInstance.current = new Chart(sensoryCanvas, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Cremosidad', 'Sabor', 'Acidez', 'Color', 'Uniformidad'],
+                        datasets: [{
+                            label: 'Puntuación Sensorial',
+                            data: [
+                                sensoryData.cremosidad,
+                                sensoryData.sabor,
+                                sensoryData.acidez,
+                                sensoryData.color,
+                                sensoryData.uniformidad
+                            ],
+                            backgroundColor: 'rgba(125, 206, 160, 0.4)',
+                            borderColor: '#7DCEA0',
+                            pointBackgroundColor: '#7DCEA0',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: '#7DCEA0'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Gráfico: Calidad Sensorial del Producto Final', // Título actualizado
+                                color: '#2C3E50'
+                            },
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            r: {
+                                angleLines: {
+                                    color: '#E5E8E8'
+                                },
+                                grid: {
+                                    color: '#E5E8E8'
+                                },
+                                pointLabels: {
+                                    color: '#2C3E50'
+                                },
+                                suggestedMin: 0,
+                                suggestedMax: 5, // Escala de 1 a 5 para puntuaciones sensoriales
+                                ticks: {
+                                    stepSize: 1,
+                                    color: '#2C3E50',
+                                    backdropColor: 'transparent' // Hace que el fondo de los ticks sea transparente
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Nuevo Gráfico de Comparación Costo vs. Ganancia
+                profitChartInstance.current = new Chart(profitCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Análisis Económico'],
+                        datasets: [
+                            {
+                                label: 'Costo Total de Preparación',
+                                data: [totalCostData],
+                                backgroundColor: '#E74C3C', // Rojo para el costo
+                                borderWidth: 1,
+                            },
+                            {
+                                label: 'Ganancia Total de Venta',
+                                data: [totalRevenueData],
+                                backgroundColor: '#7DCEA0', // Verde para la ganancia
+                                borderWidth: 1,
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Comparación: Costo de Preparación vs. Ganancia de Venta',
+                                color: '#2C3E50'
+                            },
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    color: '#2C3E50'
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    color: '#E5E8E8'
+                                }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Monto ($)',
+                                    color: '#2C3E50'
+                                },
+                                grid: {
+                                    color: '#E5E8E8'
+                                }
+                            }
+                        }
+                    }
+                });
+            };
+
+            // useEffect para actualizar los gráficos cuando los datos de resultados estén disponibles y los canvas montados
+            React.useEffect(() => {
+                // Destruir instancias de gráficos existentes al cambiar de vista
+                if (yieldChartInstance.current) yieldChartInstance.current.destroy();
+                if (costChartInstance.current) costChartInstance.current.destroy();
+                if (sensoryChartInstance.current) sensoryChartInstance.current.destroy();
+                if (profitChartInstance.current) profitChartInstance.current.destroy(); // Destruir también el nuevo gráfico
+
+                // Asegurarse de que los elementos canvas estén montados antes de intentar dibujar
+                if (!yieldChartRef.current || !costChartRef.current || !sensoryChartRef.current || !profitChartRef.current) {
+                    return;
+                }
+
+                let dataToRender = null;
+                if (currentView === 'report' && selectedHistoryItem) {
+                    dataToRender = {
+                        suero: parseFloat(selectedHistoryItem.sueroProportion),
+                        yield: parseFloat(selectedHistoryItem.expectedYield),
+                        lecheCost: (parseFloat(selectedHistoryItem.lecheProportion) / 100) * parseFloat(selectedHistoryItem.totalVolume) * parseFloat(selectedHistoryItem.lechePrice),
+                        sueroCost: (parseFloat(selectedHistoryItem.sueroProportion) / 100) * parseFloat(selectedHistoryItem.totalVolume) * parseFloat(selectedHistoryItem.sueroPrice),
+                        sensory: selectedHistoryItem.sensoryScores,
+                        totalCost: parseFloat(selectedHistoryItem.totalCost),
+                        totalRevenue: parseFloat(selectedHistoryItem.totalRevenue)
+                    };
+                } else if (currentView === 'simulation' && sensoryScores && expectedYield && totalCost && totalRevenue) {
+                    dataToRender = {
+                        suero: parseFloat(sueroProportion),
+                        yield: parseFloat(expectedYield.percentage),
+                        lecheCost: (parseFloat(lecheProportion) / 100) * parseFloat(totalVolume) * parseFloat(lechePrice),
+                        sueroCost: (parseFloat(sueroProportion) / 100) * parseFloat(totalVolume) * parseFloat(sueroPrice),
+                        sensory: sensoryScores,
+                        totalCost: parseFloat(totalCost),
+                        totalRevenue: parseFloat(totalRevenue)
+                    };
+                }
+
+                if (dataToRender) {
+                    updateCharts(
+                        dataToRender.suero,
+                        dataToRender.yield,
+                        dataToRender.lecheCost,
+                        dataToRender.sueroCost,
+                        dataToRender.sensory,
+                        dataToRender.totalCost,
+                        dataToRender.totalRevenue,
+                        yieldChartRef.current,
+                        costChartRef.current,
+                        sensoryChartRef.current,
+                        profitChartRef.current // Pasar el nuevo ref del canvas
+                    );
+                }
+            }, [currentView, selectedHistoryItem, sensoryScores, expectedYield, sueroProportion, lecheProportion, totalVolume, lechePrice, sueroPrice, totalCost, totalRevenue]);
+
+            // useEffect para procesar MathJax cuando se muestra el informe detallado o el tutorial
+            React.useEffect(() => {
+                if ((currentView === 'report' || currentView === 'tutorial') && window.MathJax) {
+                    window.MathJax.typesetPromise();
+                }
+            }, [currentView]);
+
+
+            // Función para reiniciar la aplicación
+            const resetApp = () => {
+                setSueroProportion('');
+                setLecheProportion('');
+                setTotalVolume('');
+                setLechePrice('');
+                setSueroPrice('');
+                setSalesPrice(''); // Resetear precio de venta
+                setIncubationTemp('');
+                setFermentationTime('');
+                setPhValue('');
+                setAcidity('');
+                setDensity('');
+
+                setExpectedYield(null);
+                setTotalCost(null);
+                setUnitCost(null);
+                setTotalRevenue(null); // Resetear ganancia total
+                setNetProfit(null);     // Resetear ganancia neta
+                setRecommendedFormulation(null);
+                setSensoryScores(null);
+                setMessage({ type: '', text: '' });
+                setSelectedHistoryItem(null); // Asegurarse de que el informe detallado se oculte
+                setCurrentView('simulation'); // Volver a la vista de simulación
+
+                // Destruir instancias de gráficos al reiniciar
+                if (yieldChartInstance.current) yieldChartInstance.current.destroy();
+                if (costChartInstance.current) costChartInstance.current.destroy();
+                if (sensoryChartInstance.current) sensoryChartInstance.current.destroy();
+                if (profitChartInstance.current) profitChartInstance.current.destroy(); // Destruir el nuevo gráfico
+
+                showMessage('info', 'La aplicación ha sido reiniciada. Puedes ingresar nuevos datos.');
+            };
+
+            // Función para ver el informe detallado de un elemento del historial
+            const handleViewReport = (entry) => {
+                setSelectedHistoryItem(entry);
+                setCurrentView('report');
+            };
+
+            // Función para cerrar el informe detallado y volver a la simulación
+            const handleCloseReport = () => {
+                setSelectedHistoryItem(null);
+                setCurrentView('simulation');
+                // Destruir instancias de gráficos al cerrar el informe para liberar memoria
+                if (yieldChartInstance.current) yieldChartInstance.current.destroy();
+                if (costChartInstance.current) costChartInstance.current.destroy();
+                if (sensoryChartInstance.current) sensoryChartInstance.current.destroy();
+                if (profitChartInstance.current) profitChartInstance.current.destroy(); // Destruir el nuevo gráfico
+            };
+
+            // Función para ir a la sección de recetas
+            const handleViewRecipes = () => {
+                setCurrentView('recipes');
+                // Destruir gráficos al cambiar a la vista de recetas
+                if (yieldChartInstance.current) yieldChartInstance.current.destroy();
+                if (costChartInstance.current) costChartInstance.current.destroy();
+                if (sensoryChartInstance.current) sensoryChartInstance.current.destroy();
+                if (profitChartInstance.current) profitChartInstance.current.destroy(); // Destruir el nuevo gráfico
+            };
+
+            // Función para volver de las recetas a la simulación principal
+            const handleBackToSimulationFromRecipes = () => {
+                setCurrentView('simulation');
+            };
+
+            // Función para ir a la sección de tutorial
+            const handleViewTutorial = () => {
+                setCurrentView('tutorial');
+                // Destruir gráficos al cambiar a la vista de tutorial
+                if (yieldChartInstance.current) yieldChartInstance.current.destroy();
+                if (costChartInstance.current) costChartInstance.current.destroy();
+                if (sensoryChartInstance.current) sensoryChartInstance.current.destroy();
+                if (profitChartInstance.current) profitChartInstance.current.destroy(); // Destruir el nuevo gráfico
+            };
+
+            // Función para volver del tutorial a la simulación principal
+            const handleBackToSimulationFromTutorial = () => {
+                setCurrentView('simulation');
+            };
+
+
+            return (
+                <div className="min-h-screen bg-[#F8F9FA] text-[#2C3E50] font-sans flex flex-col items-center p-4">
+                    {/* Mensajes de la aplicación */}
+                    {message.text && (
+                        <div className={`fixed top-4 left-1/2 -translate-x-1/2 p-3 rounded-lg shadow-lg z-50
+                            ${message.type === 'error' ? 'bg-[#E74C3C] text-white' : ''}
+                            ${message.type === 'success' ? 'bg-[#7DCEA0] text-white' : ''}
+                            ${message.type === 'info' ? 'bg-[#F39C12] text-white' : ''}
+                        `}>
+                            {message.text}
+                        </div>
+                    )}
+
+                    <header className="w-full max-w-2xl bg-[#154360] text-white p-4 rounded-xl shadow-md mb-6 flex justify-between items-center">
+                        <h1 className="text-3xl font-bold text-center flex-grow">YogurtLab</h1>
+                        <button
+                            onClick={handleViewTutorial}
+                            className="bg-[#F39C12] text-white py-2 px-4 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-base ml-4"
+                        >
+                            Tutorial
+                        </button>
+                    </header>
+
+                    {currentView === 'simulation' && (
+                        // Sección de Formulario de Entrada y Resultados de Simulación Actual
+                        <>
+                            <main className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-md mb-6">
+                                <h2 className="text-2xl font-semibold text-[#154360] mb-4">Parámetros de Formulación</h2>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    {/* Proporciones */}
+                                    <div>
+                                        <label htmlFor="sueroProportion" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Proporción de Suero (%)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="sueroProportion"
+                                            value={sueroProportion}
+                                            onChange={(e) => setSueroProportion(e.target.value)}
+                                            placeholder="Ej: 30 (para 30% suero)"
+                                            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]
+                                                ${sueroProportion === '' && message.type === 'error' ? 'border-[#E74C3C]' : 'border-[#E5E8E8]'}`}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="lecheProportion" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Proporción de Leche Entera (%)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="lecheProportion"
+                                            value={lecheProportion}
+                                            onChange={(e) => setLecheProportion(e.target.value)}
+                                            placeholder="Ej: 70 (para 70% leche)"
+                                            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]
+                                                ${lecheProportion === '' && message.type === 'error' ? 'border-[#E74C3C]' : 'border-[#E5E8E8]'}`}
+                                        />
+                                    </div>
+
+                                    {/* Volumen Total */}
+                                    <div>
+                                        <label htmlFor="totalVolume" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Volumen o Masa Total (Litros/Kg)
+                                            <span className="text-xs text-gray-500 ml-1">(requerido)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="totalVolume"
+                                            value={totalVolume}
+                                            onChange={(e) => setTotalVolume(e.target.value)}
+                                            placeholder="Ej: 10 (litros o kg)"
+                                            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]
+                                                ${totalVolume === '' && message.type === 'error' ? 'border-[#E74C3C]' : 'border-[#E5E8E8]'}`}
+                                        />
+                                    </div>
+
+                                    {/* Costos Unitarios */}
+                                    <div>
+                                        <label htmlFor="lechePrice" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Precio por Litro/Kg de Leche ($)
+                                            <span className="text-xs text-gray-500 ml-1">(requerido)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="lechePrice"
+                                            value={lechePrice}
+                                            onChange={(e) => setLechePrice(e.target.value)}
+                                            placeholder="Ej: 0.80"
+                                            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]
+                                                ${lechePrice === '' && message.type === 'error' ? 'border-[#E74C3C]' : 'border-[#E5E8E8]'}`}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="sueroPrice" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Precio por Litro/Kg de Suero ($)
+                                            <span className="text-xs text-gray-500 ml-1">(requerido)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="sueroPrice"
+                                            value={sueroPrice}
+                                            onChange={(e) => setSueroPrice(e.target.value)}
+                                            placeholder="Ej: 0.15"
+                                            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]
+                                                ${sueroPrice === '' && message.type === 'error' ? 'border-[#E74C3C]' : 'border-[#E5E8E8]'}`}
+                                        />
+                                    </div>
+                                    {/* Nuevo campo: Precio de Venta */}
+                                    <div>
+                                        <label htmlFor="salesPrice" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Precio de Venta por Litro/Kg de Yogurt ($)
+                                            <span className="text-xs text-gray-500 ml-1">(requerido)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="salesPrice"
+                                            value={salesPrice}
+                                            onChange={(e) => setSalesPrice(e.target.value)}
+                                            placeholder="Ej: 1.50"
+                                            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]
+                                                ${salesPrice === '' && message.type === 'error' ? 'border-[#E74C3C]' : 'border-[#E5E8E8]'}`}
+                                        />
+                                    </div>
+
+                                    {/* Parámetros de fermentación (Opcional) */}
+                                    <div>
+                                        <label htmlFor="incubationTemp" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Temperatura de Incubación (°C) (Opcional)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="incubationTemp"
+                                            value={incubationTemp}
+                                            onChange={(e) => setIncubationTemp(e.target.value)}
+                                            placeholder="Ej: 42"
+                                            className="w-full p-2 border border-[#E5E8E8] rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="fermentationTime" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Tiempo de Fermentación (horas) (Opcional)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            id="fermentationTime"
+                                            value={fermentationTime}
+                                            onChange={(e) => setFermentationTime(e.target.value)}
+                                            placeholder="Ej: 6"
+                                            className="w-full p-2 border border-[#E5E8E8] rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]"
+                                        />
+                                    </div>
+
+                                    {/* Propiedades fisicoquímicas (Avanzado/Validación) */}
+                                    <div>
+                                        <label htmlFor="phValue" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            pH de la Mezcla (Opcional)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="phValue"
+                                            value={phValue}
+                                            onChange={(e) => setPhValue(e.target.value)}
+                                            placeholder="Ej: 6.5"
+                                            className="w-full p-2 border border-[#E5E8E8] rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="acidity" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Acidez Titulable (Opcional)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="acidity"
+                                            value={acidity}
+                                            onChange={(e) => setAcidity(e.target.value)}
+                                            placeholder="Ej: 0.15"
+                                            className="w-full p-2 border border-[#E5E8E8] rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="density" className="block text-sm font-medium text-[#2C3E50] mb-1">
+                                            Densidad (Opcional)
+                                        </label>
+                                        <input
+                                            type="number"
+                                            step="0.001"
+                                            id="density"
+                                            value={density}
+                                            onChange={(e) => setDensity(e.target.value)}
+                                            placeholder="Ej: 1.03"
+                                            className="w-full p-2 border border-[#E5E8E8] rounded-md focus:outline-none focus:ring-2 focus:ring-[#1ABC9C]"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                                    <button
+                                        onClick={performCalculations}
+                                        className="bg-[#1ABC9C] text-white py-3 px-6 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-lg"
+                                    >
+                                        Calcular y Simular
+                                    </button>
+                                    <button
+                                        onClick={resetApp}
+                                        className="bg-[#F39C12] text-white py-3 px-6 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-lg"
+                                    >
+                                        Reiniciar App
+                                    </button>
+                                </div>
+                            </main>
+
+                            {/* Sección de Resultados de Simulación Actual */}
+                            {(expectedYield || totalCost || unitCost || totalRevenue || netProfit || recommendedFormulation || sensoryScores) && (
+                                <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-md mb-6">
+                                    <h2 className="text-2xl font-semibold text-[#154360] mb-4">Resultados de la Simulación Actual</h2>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                        {expectedYield && (
+                                            <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm">
+                                                <h3 className="text-lg font-medium text-[#2C3E50]">Rendimiento Esperado</h3>
+                                                <p className="text-xl font-bold text-[#154360]">{expectedYield.percentage}%</p>
+                                                <p className="text-sm text-[#2C3E50]">Volumen de yogurt: {expectedYield.volume} L/Kg</p>
+                                            </div>
+                                        )}
+                                        {totalCost && (
+                                            <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm">
+                                                <h3 className="text-lg font-medium text-[#2C3E50]">Costo Total de Mezcla</h3>
+                                                <p className="text-xl font-bold text-[#154360]">${totalCost}</p>
+                                            </div>
+                                        )}
+                                        {unitCost && (
+                                            <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm">
+                                                <h3 className="text-lg font-medium text-[#2C3E50]">Costo Unitario de Yogurt</h3>
+                                                <p className="text-xl font-bold text-[#154360]">${unitCost} /L/Kg</p>
+                                            </div>
+                                        )}
+                                        {totalRevenue && (
+                                            <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm">
+                                                <h3 className="text-lg font-medium text-[#2C3E50]">Ganancia Total de Venta</h3>
+                                                <p className="text-xl font-bold text-[#154360]">${totalRevenue}</p>
+                                            </div>
+                                        )}
+                                        {netProfit && (
+                                            <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm">
+                                                <h3 className="text-lg font-medium text-[#2C3E50]">Ganancia Neta</h3>
+                                                <p className="text-xl font-bold text-[#154360]">${netProfit}</p>
+                                            </div>
+                                        )}
+                                        {recommendedFormulation && (
+                                            <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm md:col-span-2">
+                                                <h3 className="text-lg font-medium text-[#2C3E50]">Recomendación de Formulación</h3>
+                                                <p className="text-md text-[#154360]">{recommendedFormulation}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Gráficos de la simulación actual */}
+                                    <h3 className="text-xl font-semibold text-[#154360] mb-4">Gráficos Interactivos</h3>
+                                    <div className="flex flex-col gap-6">
+                                        <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                            <canvas ref={yieldChartRef}></canvas>
+                                        </div>
+                                        <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                            <canvas ref={costChartRef}></canvas>
+                                        </div>
+                                        <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                            <canvas ref={sensoryChartRef}></canvas>
+                                        </div>
+                                        <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                            <canvas ref={profitChartRef}></canvas> {/* Nuevo canvas para el gráfico de ganancia */}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {currentView === 'report' && selectedHistoryItem && (
+                        // Sección de Informe Detallado (cuando se selecciona un elemento del historial)
+                        <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-md mb-6">
+                            <h2 className="text-2xl font-semibold text-[#154360] mb-4">Informe de Simulación (ID: {selectedHistoryItem.id})</h2>
+                            <p className="text-sm text-[#2C3E50] mb-4">Fecha: {selectedHistoryItem.date} - Hora: {selectedHistoryItem.time}</p>
+
+                            {/* Parámetros de Entrada */}
+                            <h3 className="text-xl font-semibold text-[#154360] mb-2">1. Parámetros de Entrada</h3>
+                            <ul className="list-disc list-inside mb-4 text-[#2C3E50]">
+                                <li>Proporción Suero/Leche: {selectedHistoryItem.sueroProportion}% / {selectedHistoryItem.lecheProportion}%</li>
+                                <li>Volumen Total: {selectedHistoryItem.totalVolume} L/Kg</li>
+                                <li>Precio Leche: ${selectedHistoryItem.lechePrice} /L/Kg</li>
+                                <li>Precio Suero: ${selectedHistoryItem.sueroPrice} /L/Kg</li>
+                                <li>Precio de Venta: ${selectedHistoryItem.salesPrice} /L/Kg</li> {/* Mostrar precio de venta */}
+                            </ul>
+
+                            {/* Resultados Clave */}
+                            <h3 className="text-xl font-semibold text-[#154360] mb-2">2. Resultados Clave</h3>
+                            <ul className="list-disc list-inside mb-4 text-[#2C3E50]">
+                                <li>Rendimiento Esperado: {selectedHistoryItem.expectedYield}% ({(selectedHistoryItem.totalVolume * selectedHistoryItem.expectedYield / 100).toFixed(2)} L/Kg de yogurt)</li>
+                                <li>Costo Total: ${selectedHistoryItem.totalCost}</li>
+                                <li>Costo Unitario: ${selectedHistoryItem.unitCost} /L/Kg de yogurt</li>
+                                <li>Ganancia Total de Venta: ${selectedHistoryItem.totalRevenue}</li> {/* Mostrar ganancia total */}
+                                <li>Ganancia Neta: ${selectedHistoryItem.netProfit}</li>         {/* Mostrar ganancia neta */}
+                            </ul>
+
+                            {/* Recomendación de Formulación */}
+                            <h3 className="text-xl font-semibold text-[#154360] mb-2">3. Recomendación de Formulación</h3>
+                            <p className="mb-4 text-[#2C3E50]">La proporción óptima es 70% leche / 30% suero para un mejor perfil sensorial.</p>
+
+                            {/* Ecuaciones */}
+                            <h3 className="text-xl font-semibold text-[#154360] mb-2">4. Ecuaciones Utilizadas</h3>
+                            <ul className="list-disc list-inside mb-4 text-[#2C3E50]">
+                                <li dangerouslySetInnerHTML={{ __html: "Balance de Materia: $Rendimiento = f(\\%Suero, \\text{otros parámetros})$" }}></li>
+                                <li dangerouslySetInnerHTML={{ __html: "Costo Total: $\\text{Costo Total} = (\\text{volumen leche} \\times \\text{precio leche}) + (\\text{volumen suero} \\times \\text{precio suero})$" }}></li>
+                                <li dangerouslySetInnerHTML={{ __html: "Costo Unitario: $\\text{Costo Unitario} = \\frac{\\text{Costo Total}}{\\text{Volumen Yogurt Producido}}$" }}></li>
+                            </ul>
+
+                            {/* Gráficos para el elemento del historial seleccionado */}
+                            <h3 className="text-xl font-semibold text-[#154360] mb-4">Gráficos del Informe</h3>
+                            <div className="flex flex-col gap-6">
+                                <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                    <canvas ref={yieldChartRef}></canvas>
+                                </div>
+                                <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                    <canvas ref={costChartRef}></canvas>
+                                </div>
+                                <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                    <canvas ref={sensoryChartRef}></canvas>
+                                </div>
+                                <div className="bg-[#E5E8E8] p-4 rounded-lg shadow-sm h-64">
+                                    <canvas ref={profitChartRef}></canvas> {/* Nuevo canvas para el gráfico de ganancia */}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row justify-center gap-4 mt-6">
+                                <button
+                                    onClick={handleCloseReport}
+                                    className="bg-[#154360] text-white py-3 px-6 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-lg"
+                                >
+                                    Volver a la Simulación
+                                </button>
+                                <button
+                                    onClick={handleViewRecipes}
+                                    className="bg-[#F39C12] text-white py-3 px-6 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-lg"
+                                >
+                                    Ver Recetas de Yogurt
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {currentView === 'recipes' && (
+                        // Sección de Recetas de Yogurt
+                        <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-md mb-6">
+                            <h2 className="text-2xl font-semibold text-[#154360] mb-4 text-center">Recetas de Yogurt Frutado Peruano</h2>
+                            <p className="text-center text-sm text-[#2C3E50] mb-6">Explora diferentes métodos para saborizar tu yogurt base con frutas peruanas.</p>
+
+                            {/* Método Confitado */}
+                            <div className="mb-8 p-4 bg-[#E5E8E8] rounded-lg shadow-sm">
+                                <h3 className="text-xl font-semibold text-[#154360] mb-2 cursor-pointer flex justify-between items-center"
+                                    onClick={() => setShowConfitadoSteps(!showConfitadoSteps)}>
+                                    Método Confitado de Frutas
+                                    <span className="text-xl">{showConfitadoSteps ? '▲' : '▼'}</span>
+                                </h3>
+                                {showConfitadoSteps && (
+                                    <>
+                                        <p className="text-sm text-[#2C3E50] mb-3">
+                                            El confitado de frutas es un proceso de conservación donde la fruta se cocina lentamente en almíbar, reemplazando su agua por azúcar. Esto le da una textura suave y un sabor dulce intenso, ideal para mezclar con yogurt.
+                                        </p>
+                                        <h4 className="text-lg font-medium text-[#154360] mb-2">Ingredientes:</h4>
+                                        <ul className="list-disc list-inside text-[#2C3E50] mb-3">
+                                            <li>500g de fruta peruana fresca (ej: Lucuma, Aguaymanto, Maracuyá, Chirimoya, Camu Camu, Tuna, Granadilla, Sauco, Pacay, Pepino Dulce)</li>
+                                            <li>500g de azúcar blanca</li>
+                                            <li>250ml de agua</li>
+                                            <li>Jugo de 1/2 limón (opcional, para realzar el sabor y evitar cristalización)</li>
+                                        </ul>
+                                        <h4 className="text-lg font-medium text-[#154360] mb-2">Pasos:</h4>
+                                        <ol className="list-decimal list-inside text-[#2C3E50]">
+                                            <li>Lava y pela la fruta (si es necesario). Corta en trozos pequeños o cubos.</li>
+                                            <li>En una olla, combina el azúcar y el agua. Calienta a fuego medio, removiendo hasta que el azúcar se disuelva por completo y hierva.</li>
+                                            <li>Añade la fruta y el jugo de limón (si usas). Reduce el fuego a bajo y cocina a fuego lento.</li>
+                                            <li>Cocina por 1-2 horas, o hasta que la fruta esté translúcida y el almíbar se haya espesado. Remueve ocasionalmente para evitar que se pegue.</li>
+                                            <li>Retira del fuego y deja enfriar. Una vez frío, guarda en un recipiente hermético en el refrigerador.</li>
+                                            <li>Para usar, mezcla la fruta confitada con tu yogurt base al gusto.</li>
+                                        </ol>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Método Mermelada de Yogurt */}
+                            <div className="mb-8 p-4 bg-[#E5E8E8] rounded-lg shadow-sm">
+                                <h3 className="text-xl font-semibold text-[#154360] mb-2 cursor-pointer flex justify-between items-center"
+                                    onClick={() => setShowMermeladaSteps(!showMermeladaSteps)}>
+                                    Método Mermelada de Frutas para Yogurt
+                                    <span className="text-xl">{showMermeladaSteps ? '▲' : '▼'}</span>
+                                </h3>
+                                {showMermeladaSteps && (
+                                    <>
+                                        <p className="text-sm text-[#2C3E50] mb-3">
+                                            Una mermelada casera es una excelente forma de añadir sabor y textura a tu yogurt. Este método es más rápido que el confitado y resulta en una consistencia más tradicional de mermelada.
+                                        </p>
+                                        <h4 className="text-lg font-medium text-[#154360] mb-2">Ingredientes:</h4>
+                                        <ul className="list-disc list-inside text-[#2C3E50] mb-3">
+                                            <li>500g de fruta peruana fresca (ej: Lucuma, Aguaymanto, Maracuyá, Chirimoya, Camu Camu, Tuna, Granadilla, Sauco, Pacay, Pepino Dulce)</li>
+                                            <li>250g de azúcar blanca (ajustar al gusto según la acidez de la fruta)</li>
+                                            <li>Jugo de 1 limón (para ayudar a la pectina y el sabor)</li>
+                                            <li>1/4 taza de agua (opcional, si la fruta no suelta mucho líquido)</li>
+                                        </ul>
+                                        <h4 className="text-lg font-medium text-[#154360] mb-2">Pasos:</h4>
+                                        <ol className="list-decimal list-inside text-[#2C3E50]">
+                                            <li>Lava y corta la fruta en trozos pequeños.</li>
+                                            <li>Coloca la fruta, el azúcar, el jugo de limón y el agua (si usas) en una olla grande.</li>
+                                            <li>Lleva a ebullición a fuego medio-alto, removiendo constantemente.</li>
+                                            <li>Reduce el fuego a bajo y cocina a fuego lento, removiendo ocasionalmente, durante 20-30 minutos o hasta que la mermelada espese a tu gusto. Puedes aplastar la fruta con un tenedor si deseas una textura más suave.</li>
+                                            <li>Retira del fuego y deja enfriar. Una vez frío, guarda en frascos esterilizados en el refrigerador.</li>
+                                            <li>Mezcla la mermelada con tu yogurt base para un delicioso yogurt frutado.</li>
+                                        </ol>
+                                    </>
+                                )}
+                            </div>
+
+                            <div className="flex justify-center mt-6">
+                                <button
+                                    onClick={handleBackToSimulationFromRecipes}
+                                    className="bg-[#154360] text-white py-3 px-6 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-lg"
+                                >
+                                    Volver a la Simulación
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {currentView === 'tutorial' && (
+                        // Sección de Tutorial
+                        <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-md mb-6">
+                            <h2 className="text-2xl font-semibold text-[#154360] mb-4 text-center">Tutorial: Cómo Usar YogurtLab</h2>
+                            <p className="text-center text-sm text-[#2C3E50] mb-6">Aprende a sacar el máximo provecho de esta herramienta y entiende los conceptos clave.</p>
+
+                            <div className="mb-8 p-4 bg-[#E5E8E8] rounded-lg shadow-sm">
+                                <h3 className="text-xl font-semibold text-[#154360] mb-2">1. ¿Qué es YogurtLab?</h3>
+                                <p className="text-sm text-[#2C3E50] mb-3">
+                                    YogurtLab es una aplicación diseñada para ayudarte a simular y optimizar la formulación de yogurt, especialmente cuando se considera el uso de suero de leche como ingrediente. Te permite ingresar parámetros clave y visualizar cómo afectan el rendimiento, los costos y la calidad sensorial del producto final.
+                                </p>
+                            </div>
+
+                            <div className="mb-8 p-4 bg-[#E5E8E8] rounded-lg shadow-sm">
+                                <h3 className="text-xl font-semibold text-[#154360] mb-2">2. Cómo Usar la Aplicación:</h3>
+                                <ul className="list-disc list-inside text-[#2C3E50] mb-3">
+                                    <li>
+                                        <strong className="font-semibold">Parámetros de Formulación:</strong>
+                                        <ul className="list-circle list-inside ml-4 mt-1">
+                                            <li><strong className="font-semibold">Proporción de Suero/Leche:</strong> Ingresa el porcentaje de suero y leche entera que deseas usar. La suma debe ser 100%.</li>
+                                            <li><strong className="font-semibold">Volumen o Masa Total:</strong> Define la cantidad total de mezcla que deseas producir (en Litros o Kg).</li>
+                                            <li><strong className="font-semibold">Precio por Litro/Kg de Leche y Suero:</strong> Introduce los costos unitarios de tus materias primas.</li>
+                                            <li><strong className="font-semibold">Parámetros Opcionales:</strong> Puedes especificar la temperatura de incubación, tiempo de fermentación, pH, acidez titulable y densidad para una simulación más completa.</li>
+                                        </ul>
+                                    </li>
+                                    <li><strong className="font-semibold">Calcular y Simular:</strong> Haz clic en este botón para ejecutar los cálculos y ver los resultados.</li>
+                                    <li><strong className="font-semibold">Resultados de la Simulación Actual:</strong> Aquí verás el rendimiento esperado, el costo total y unitario, y una recomendación de formulación.</li>
+                                    <li><strong className="font-semibold">Gráficos Interactivos:</strong> Se generarán gráficos que visualizan el rendimiento vs. proporción de suero, el desglose de costos y el perfil sensorial predicho.</li>
+                                    <li><strong className="font-semibold">Historial de Simulaciones:</strong> Todas tus simulaciones se guardan automáticamente. Puedes ver informes detallados de simulaciones anteriores.</li>
+                                    <li><strong className="font-semibold">Ver Recetas de Yogurt:</strong> Explora ideas para saborizar tu yogurt con frutas peruanas.</li>
+                                </ul>
+                            </div>
+
+                            <div className="mb-8 p-4 bg-[#E5E8E8] rounded-lg shadow-sm">
+                                <h3 className="text-xl font-semibold text-[#154360] mb-2">3. Conceptos Teóricos Clave:</h3>
+                                <ul className="list-disc list-inside mb-4 text-[#2C3E50]">
+                                    <li dangerouslySetInnerHTML={{ __html: "<strong>Balance de Materia:</strong> Es la base para calcular el rendimiento. En la producción de yogurt, se refiere a la conservación de la masa total de los ingredientes a través del proceso. La ecuación general es: $Rendimiento = f(\\%Suero, \\text{otros parámetros})$" }}></li>
+                                    <li dangerouslySetInnerHTML={{ __html: "<strong>Costo Total:</strong> Representa el gasto total en materias primas para una producción específica. La ecuación es: $\\text{Costo Total} = (\\text{volumen leche} \\times \\text{precio leche}) + (\\text{volumen suero} \\times \\text{precio suero})$" }}></li>
+                                    <li dangerouslySetInnerHTML={{ __html: "<strong>Costo Unitario:</strong> Indica el costo por unidad de producto final. Es crucial para la rentabilidad. La ecuación es: $\\text{Costo Unitario} = \\frac{\\text{Costo Total}}{\\text{Volumen Yogurt Producido}}$" }}></li>
+                                    <li><strong className="font-semibold">Perfil Sensorial:</strong> Se refiere a las características organolépticas del yogurt (sabor, textura, color, aroma). La proporción de suero y otros parámetros influyen significativamente en este perfil.</li>
+                                    <li><strong className="font-semibold">Suero de Leche:</strong> Un subproducto de la elaboración de queso rico en proteínas y lactosa. Su incorporación en el yogurt puede mejorar el valor nutricional y reducir costos, pero debe ser balanceada para no afectar la calidad sensorial.</li>
+                                </ul>
+                            </div>
+
+                            <div className="flex justify-center mt-6">
+                                <button
+                                    onClick={handleBackToSimulationFromTutorial}
+                                    className="bg-[#154360] text-white py-3 px-6 rounded-lg shadow-md hover:bg-opacity-90 transition-all duration-300 ease-in-out font-semibold text-lg"
+                                >
+                                    Volver a la Simulación
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Historial de Simulaciones */}
+                    {history.length > 0 && currentView !== 'recipes' && currentView !== 'tutorial' && ( // Ocultar historial si estamos en la vista de recetas o tutorial
+                        <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-md mb-6">
+                            <h2 className="text-2xl font-semibold text-[#154360] mb-4">Historial de Simulaciones</h2>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full bg-white rounded-lg overflow-hidden shadow-sm">
+                                    <thead className="bg-[#154360] text-white">
+                                        <tr>
+                                            <th className="py-2 px-4 text-left">ID</th>
+                                            <th className="py-2 px-4 text-left">Fecha</th>
+                                            <th className="py-2 px-4 text-left">Hora</th>
+                                            <th className="py-2 px-4 text-left">Suero/Leche (%)</th>
+                                            <th className="py-2 px-4 text-left">Rendimiento (%)</th>
+                                            <th className="py-2 px-4 text-left">Costo Total ($)</th>
+                                            <th className="py-2 px-4 text-left">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {history.map((entry) => (
+                                            <tr key={entry.id} className="border-b border-[#E5E8E8] last:border-b-0 hover:bg-[#F8F9FA]">
+                                                <td className="py-2 px-4">{entry.id}</td>
+                                                <td className="py-2 px-4">{entry.date}</td>
+                                                <td className="py-2 px-4">{entry.time}</td>
+                                                <td className="py-2 px-4">{entry.sueroProportion}/{entry.lecheProportion}</td>
+                                                <td className="py-2 px-4">{entry.expectedYield}</td>
+                                                <td className="py-2 px-4">${entry.totalCost}</td>
+                                                <td className="py-2 px-4">
+                                                    <button
+                                                        onClick={() => handleViewReport(entry)}
+                                                        className="bg-[#1ABC9C] text-white text-sm py-1 px-3 rounded-md hover:bg-opacity-90 transition-colors duration-200"
+                                                    >
+                                                        Ver Informe
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    <footer className="w-full max-w-2xl text-center text-sm text-[#2C3E50] mt-6 p-4">
+                        © 2025 YogurtLab. Todos los derechos reservados.
+                    </footer>
+                </div>
+            );
+        };
+
+        // Renderiza la aplicación React en el div con id "root"
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+    <!-- Fin de la PARTE JAVASCRIPT -->
+</body>
+</html>
